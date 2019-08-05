@@ -640,4 +640,308 @@ export default class Messenger {
     _onRead = (event) => {
         this._emit(MessengerEventTypes.Read, event);
     };
+
+    /**
+     * Add new participants to the conversation.
+     *
+     * It's possible only on the following conditions:
+     * - the participants are users of the main Voximplant developer account or its child accounts
+     * - the current user can manage other participants ({@link Voximplant.Messaging.ConversationParticipant#canManageParticipants} is true)
+     * - the conversation is not a direct one ({@link Voximplant.Messaging.Conversation#direct} is false)
+     *
+     * Duplicated users are ignored. The promise will be rejected with {@link EventHandlers.ErrorEvent} if at least one user does not exist
+     * or already belongs to the conversation.
+     *
+     * Other parties of the conversation (online participants and logged in clients) can be informed about adding
+     * participants via the {@link Voximplant.Messaging.MessengerEventTypes.EditConversation} event.
+     *
+     * @param {Array<Voximplant.Messaging.ConversationParticipant>} participants - Array of ConversationParticipant to be added to the conversation.
+     * Should not be null or empty array
+     * @return {Promise<EventHandlers.ConversationEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    addParticipants(uuid, participants) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.addParticipants(uuid, participants, (conversationEvent, errorEvent) => {
+                if (conversationEvent) {
+                    Conversation._processConversationEvent(conversationEvent);
+                    resolve(conversationEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Edit participants' permissions. It's possible only if the current user can manage other participants
+     * ({@link Voximplant.Messaging.ConversationParticipant#canManageParticipants} is true).
+     *
+     * Duplicated users are ignored. The list of participants must contain all participants.
+     * Other parties of the conversation (online participants and logged in clients) can be informed about editing
+     * participants via the {@link Voximplant.Messaging.MessengerEventTypes.EditConversation} event.
+     *
+     * @param {Array<Voximplant.Messaging.ConversationParticipant>} participants - Array of ConversationParticipant to be edited in the conversation.
+     * Should not be null or empty array
+     * @return {Promise<EventHandlers.ConversationEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    editParticipants(participants) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.editParticipants(this.uuid, participants, (conversationEvent, errorEvent) => {
+                if (conversationEvent) {
+                    Conversation._processConversationEvent(conversationEvent);
+                    resolve(conversationEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Remove participants from the conversation.
+     * It's possible only on two conditions:
+     * - the current user can manage other participants ({@link Voximplant.Messaging.ConversationParticipant#canManageParticipants} is true).
+     * - the conversation is not a direct one ({@link Voximplant.Messaging.Conversation#direct} is false)
+     *
+     * Duplicated users are ignored. The promise will be rejected with {@link EventHandlers.ErrorEvent} if at least one user:
+     * - does not exist
+     * - is already removed
+     *
+     * Note that you can remove participants that are marked as deleted ({@link Voximplant.Messaging.User#isDeleted} is true).
+     *
+     * The removed participants can later get this conversation's UUID via the {@link Voximplant.Messaging.User#leaveConversationList}.
+     *
+     * Other parties of the conversation (online participants and logged in clients) can be informed about removing participants
+     * via the {@link Voximplant.Messaging.MessengerEventTypes.EditConversation} event.
+     *
+     * @param {Array<Voximplant.Messaging.ConversationParticipant>} participants - Array of ConversationParticipant to be removed from the conversation.
+     * Should not be null or empty array
+     * @return {Promise<EventHandlers.ConversationEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    removeParticipants(participants) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.removeParticipants(this.uuid, participants, (conversationEvent, errorEvent) => {
+                if (conversationEvent) {
+                    Conversation._processConversationEvent(conversationEvent);
+                    resolve(conversationEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Send conversation changes to the cloud. The sent changes are: title, public join flag and custom data.
+     *
+     * Successful update will happen if a participant is the owner ({@link Voximplant.Messaging.ConversationParticipant#owner} is true).
+     *
+     * Other parties of the conversation (online participants and logged in clients) can be informed about changing
+     * the title or custom data and enabling/disabling public join via
+     * the {@link Voximplant.Messaging.MessengerEventTypes.EditConversation} event.
+     *
+     * @return {Promise<EventHandlers.ConversationEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    update() {
+        return new Promise((resolve, reject) => {
+            MessagingModule.updateConversation(this.uuid, this.title, this.publicJoin,
+                this.customData, this.uber, this.direct, (conversationEvent, errorEvent) => {
+                    if (conversationEvent) {
+                        Conversation._processConversationEvent(conversationEvent);
+                        resolve(conversationEvent);
+                    } else {
+                        reject(errorEvent);
+                    }
+                });
+        });
+    }
+
+    /**
+     * Inform the cloud that the user is typing some text.
+     *
+     * The promise will be rejected with {@link EventHandlers.ErrorEvent} for the method calls within 10s interval from the last call cause.
+     *
+     * Other parties of the conversation (online participants and logged in clients) can be informed about typing
+     * via the {@link Voximplant.Messaging.MessengerEventTypes.Typing} event.
+     *
+     * @return {Promise<EventHandlers.ConversationServiceEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    typing() {
+        return new Promise((resolve, reject) => {
+            MessagingModule.typing(this.uuid, (conversationServiceEvent, errorEvent) => {
+                if (conversationServiceEvent) {
+                    resolve(conversationServiceEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Send a message to the conversation.
+     *
+     * Sending messages is available only for participants that have write permissions
+     * ({@link Voximplant.Messaging.ConversationParticipant#canWrite} is true).
+     *
+     * Other parties of the conversation (online participants and logged in clients) can be informed about
+     * sending messages to the conversation via the {@link Voximplant.Messaging.MessengerEventTypes.SendMessage} event.
+     *
+     * To be informed about sending messages while being offline, participants can subscribe
+     * to the {@link Voximplant.Messaging.MessengerNotification.SendMessage} messenger push notification.
+     *
+     * @param {string} text - Message text, maximum 5000 characters
+     * @param {Array<object>} [payload] - Message payload
+     * @return {Promise<EventHandlers.MessageEvent|EventHandlers.ErrorEvent>}
+     *
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    sendMessage(text, payload) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.sendMessage(this.uuid, text, payload, (messageEvent, errorEvent) => {
+                if (messageEvent) {
+                    Message._processMessageEvent(messageEvent);
+                    resolve(messageEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Mark the event with the specified sequence as read.
+     *
+     * A method call with the specified sequence makes the {@link Voximplant.Messaging.ConversationParticipant#lastReadEventSequence}
+     * return this sequence, i.e., such sequences can be get for each participant separately.
+     *
+     * If the sequence parameter specified less than 1, the method will mark all the events as unread (for this participant)
+     * except the event with the sequence equals to '1'.
+     *
+     * Other parties of the conversation (online participants and logged in clients) can be informed about marking events
+     * as read via the {@link Voximplant.Messaging.MessengerEventTypes.Read} event.
+     *
+     * @param {number} sequence - Sequence number of the event in the conversation to be marked as read. Shouldn't be greater than currently possible.
+     * @return {Promise<EventHandlers.ConversationServiceEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    markAsRead(sequence) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.markAsRead(this.uuid, sequence, (conversationServiceEvent, errorEvent) => {
+                if (conversationServiceEvent) {
+                    resolve(conversationServiceEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Request events in the specified sequence range to be sent from the cloud to this client.
+     *
+     * Only {@link EventHandlers.ConversationEvent} and {@link EventHandlers.MessageEvent} events can be retransmitted;
+     * any other events can't be retransmitted.
+     *
+     * The method is used to get history or missed events in case of network disconnect. Client should use this method
+     * to request all events based on the last event sequence received from the cloud and last event sequence saved locally (if any).
+     *
+     * The maximum amount of retransmitted events per method call is 100. The promise will be rejected with {@link EventHandlers.ErrorEvent}
+     * if more than 100 events are requested.
+     *
+     * If the current user quits a {@link Voximplant.Messaging.Conversation#uber} conversation, messages that are posted
+     * during the user's absence will not be retransmitted later.
+     *
+     * @param {number} from - First event in range sequence, inclusive
+     * @param {number} to - Last event in sequence range, inclusive
+     * @return {Promise<EventHandlers.RetransmitEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    retransmitEvents(from, to) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.retransmitEvents(this.uuid, from, to, (retransmitEvent, errorEvent) => {
+                if (retransmitEvent) {
+                    Conversation._processRetransmitEvent(retransmitEvent);
+                    resolve(retransmitEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Request a number of events starting with the specified sequence to be sent from the cloud to this client.
+     *
+     * Only {@link EventHandlers.ConversationEvent} and {@link EventHandlers.MessageEvent} events can be retransmitted;
+     * any other events can't be retransmitted.
+     *
+     * The method is used to get history or missed events in case of network disconnect. Client should use this method
+     * to request all events based on the last event sequence received from the cloud and last event sequence saved locally (if any).
+     *
+     * The maximum amount of retransmitted events per method call is 100. The promise will be rejected with {@link EventHandlers.ErrorEvent}
+     * if more than 100 events are requested.
+     *
+     * If the current user quits a {@link Voximplant.Messaging.Conversation#uber} conversation, messages that are posted
+     * during the user's absence will not be retransmitted later.
+     *
+     * The result contains maximum available events for the current user even if it's less than the specified count value.
+     *
+     * @param {number} from - First event in sequence range, inclusive
+     * @param {number} count - Number of events
+     * @return {Promise<EventHandlers.RetransmitEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    retransmitEventsFrom(from, count) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.retransmitEventsFrom(this.uuid, from, count, (retransmitEvent, errorEvent) => {
+                if (retransmitEvent) {
+                    Conversation._processRetransmitEvent(retransmitEvent);
+                    resolve(retransmitEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
+
+    /**
+     * Request a number of events up to the specified sequence to be sent from the cloud to this client.
+     *
+     * Only {@link EventHandlers.ConversationEvent} and {@link EventHandlers.MessageEvent} events can be retransmitted;
+     * any other events can't be retransmitted.
+     *
+     * The method is used to get history or missed events in case of network disconnect. Client should use this method
+     * to request all events based on the last event sequence received from the cloud and last event sequence saved locally (if any).
+     *
+     * The maximum amount of retransmitted events per method call is 100. The promise will be rejected with {@link EventHandlers.ErrorEvent}
+     * if more than 100 events are requested.
+     *
+     * If the current user quits a {@link Voximplant.Messaging.Conversation#uber} conversation, messages that are posted
+     * during the user's absence will not be retransmitted later.
+     *
+     * The result contains maximum available events for the current user even if it's less than the specified count value.
+     *
+     * @param {number} to - Last event in sequence range, inclusive
+     * @param {number} count - Number of events
+     * @return {Promise<EventHandlers.RetransmitEvent|EventHandlers.ErrorEvent>}
+     * @memberOf Voximplant.Messaging.Conversation
+     */
+    retransmitEventsTo(to, count) {
+        return new Promise((resolve, reject) => {
+            MessagingModule.retransmitEventsTo(this.uuid, to, count, (retransmitEvent, errorEvent) => {
+                if (retransmitEvent) {
+                    Conversation._processRetransmitEvent(retransmitEvent);
+                    resolve(retransmitEvent);
+                } else {
+                    reject(errorEvent);
+                }
+            });
+        });
+    }
 }
